@@ -43,62 +43,6 @@ ZEROS: list[tuple[str, float]] = [
     ("dof_left_ankle_02", math.radians(-30.0)),
 ]
 
-
-@dataclass
-class HumanoidWalkingTaskConfig(ksim.PPOConfig):
-    """Config for the humanoid walking task."""
-
-    # Model parameters.
-    hidden_size: int = xax.field(
-        value=128,
-        help="The hidden size for the MLPs.",
-    )
-    depth: int = xax.field(
-        value=5,
-        help="The depth for the MLPs.",
-    )
-    num_mixtures: int = xax.field(
-        value=5,
-        help="The number of mixtures for the actor.",
-    )
-    var_scale: float = xax.field(
-        value=0.5,
-        help="The scale for the standard deviations of the actor.",
-    )
-    use_acc_gyro: bool = xax.field(
-        value=True,
-        help="Whether to use the IMU acceleration and gyroscope observations.",
-    )
-
-    # Curriculum parameters.
-    num_curriculum_levels: int = xax.field(
-        value=100,
-        help="The number of curriculum levels to use.",
-    )
-    increase_threshold: float = xax.field(
-        value=5.0,
-        help="Increase the curriculum level when the mean trajectory length is above this threshold.",
-    )
-    decrease_threshold: float = xax.field(
-        value=1.0,
-        help="Decrease the curriculum level when the mean trajectory length is below this threshold.",
-    )
-    min_level_steps: int = xax.field(
-        value=1,
-        help="The minimum number of steps to wait before changing the curriculum level.",
-    )
-
-    # Optimizer parameters.
-    learning_rate: float = xax.field(
-        value=3e-4,
-        help="Learning rate for PPO.",
-    )
-    adam_weight_decay: float = xax.field(
-        value=1e-5,
-        help="Weight decay for the Adam optimizer.",
-    )
-
-
 @attrs.define(frozen=True, kw_only=True)
 class JointPositionPenalty(ksim.JointDeviationPenalty):
     @classmethod
@@ -355,6 +299,59 @@ class Model(eqx.Module):
             num_inputs=num_critic_inputs,
         )
 
+@dataclass
+class HumanoidWalkingTaskConfig(ksim.PPOConfig):
+    """Config for the humanoid walking task."""
+
+    # Model parameters.
+    hidden_size: int = xax.field(
+        value=128,
+        help="The hidden size for the MLPs.",
+    )
+    depth: int = xax.field(
+        value=5,
+        help="The depth for the MLPs.",
+    )
+    num_mixtures: int = xax.field(
+        value=5,
+        help="The number of mixtures for the actor.",
+    )
+    var_scale: float = xax.field(
+        value=0.5,
+        help="The scale for the standard deviations of the actor.",
+    )
+    use_acc_gyro: bool = xax.field(
+        value=True,
+        help="Whether to use the IMU acceleration and gyroscope observations.",
+    )
+
+    # Curriculum parameters.
+    num_curriculum_levels: int = xax.field(
+        value=100,
+        help="The number of curriculum levels to use.",
+    )
+    increase_threshold: float = xax.field(
+        value=5.0,
+        help="Increase the curriculum level when the mean trajectory length is above this threshold.",
+    )
+    decrease_threshold: float = xax.field(
+        value=1.0,
+        help="Decrease the curriculum level when the mean trajectory length is below this threshold.",
+    )
+    min_level_steps: int = xax.field(
+        value=1,
+        help="The minimum number of steps to wait before changing the curriculum level.",
+    )
+
+    # Optimizer parameters.
+    learning_rate: float = xax.field(
+        value=3e-4,
+        help="Learning rate for PPO.",
+    )
+    adam_weight_decay: float = xax.field(
+        value=1e-5,
+        help="Weight decay for the Adam optimizer.",
+    )
 
 class HumanoidWalkingTask(ksim.PPOTask[HumanoidWalkingTaskConfig]):
     def get_optimizer(self) -> optax.GradientTransformation:
@@ -455,13 +452,13 @@ class HumanoidWalkingTask(ksim.PPOTask[HumanoidWalkingTaskConfig]):
     def get_rewards(self, physics_model: ksim.PhysicsModel) -> list[ksim.Reward]:
         return [
             # Standard rewards.
-            ksim.NaiveForwardReward(clip_max=1.25, in_robot_frame=False, scale=3.0),
+            ksim.NaiveForwardReward(clip_max=1.4, in_robot_frame=False, scale=3.5),
             ksim.NaiveForwardOrientationReward(scale=1.0),
             ksim.StayAliveReward(scale=1.0),
             ksim.UprightReward(scale=0.5),
             # Avoid movement penalties.
             ksim.AngularVelocityPenalty(index=("x", "y"), scale=-0.1),
-            ksim.LinearVelocityPenalty(index=("z"), scale=-0.1),
+            ksim.LinearVelocityPenalty(index=("z"), scale=-0.3),
             # Normalization penalties.
             ksim.AvoidLimitsPenalty.create(physics_model, scale=-0.01),
             ksim.JointAccelerationPenalty(scale=-0.01, scale_by_curriculum=True),
@@ -471,13 +468,13 @@ class HumanoidWalkingTask(ksim.PPOTask[HumanoidWalkingTaskConfig]):
             ksim.ActionAccelerationPenalty(scale=-0.01, scale_by_curriculum=True),
             # Bespoke rewards.
             BentArmPenalty.create_penalty(physics_model, scale=-0.1),
-            StraightLegPenalty.create_penalty(physics_model, scale=-0.1),
+            StraightLegPenalty.create_penalty(physics_model, scale=-0.2),
         ]
 
     def get_terminations(self, physics_model: ksim.PhysicsModel) -> list[ksim.Termination]:
         return [
             ksim.BadZTermination(unhealthy_z_lower=0.6, unhealthy_z_upper=1.2),
-            ksim.FarFromOriginTermination(max_dist=10.0),
+            ksim.FarFromOriginTermination(max_dist=30.0),
         ]
 
     def get_curriculum(self, physics_model: ksim.PhysicsModel) -> ksim.Curriculum:
