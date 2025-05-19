@@ -399,7 +399,7 @@ class HumanoidWalkingTask(ksim.PPOTask[HumanoidWalkingTaskConfig]):
                 x_force=1.0,
                 y_force=1.0,
                 z_force=0.3,
-                force_range=(0.5, 1.0),
+                force_range=(1.0, 5.0),
                 x_angular_force=0.0,
                 y_angular_force=0.0,
                 z_angular_force=0.0,
